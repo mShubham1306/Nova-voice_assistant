@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: nova-voice-assistant-backend
+    runtime: docker
+    plan: free
+    region: oregon # or frankfurt
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: PORT
+        value: "5000"
+      - key: HOST
+        value: "0.0.0.0"
