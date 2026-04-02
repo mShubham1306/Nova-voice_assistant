@@ -49,3 +49,10 @@ desktop.ini
 
 # Vercel
 .vercel/
+
+# Build / compiled
+dist/
+__pycache__/
+*.pyc
+backend/__pycache__/
+
