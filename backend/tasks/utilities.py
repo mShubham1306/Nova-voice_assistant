@@ -7,7 +7,10 @@ import os
 import datetime
 import threading
 import time
-import pyautogui
+try:
+    import pyautogui
+except ImportError:
+    pyautogui = None
 from config import Config
 
 
@@ -21,6 +24,10 @@ class Utilities:
 
     def take_screenshot(self):
         """Capture a screenshot and save it."""
+        if pyautogui is None:
+            self.voice.speak("Screenshots are not available on this server.")
+            return "Screenshot unavailable."
+        
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filepath = os.path.join(Config.OUTPUT_DIR, f"screenshot_{timestamp}.png")
         screenshot = pyautogui.screenshot()
@@ -144,6 +151,10 @@ class Utilities:
 
     def type_text(self, query):
         """Type text using keyboard simulation."""
+        if pyautogui is None:
+            self.voice.speak("Typing simulation is not available on this server.")
+            return "Typing simulation unavailable."
+
         text = query.lower()
         for prefix in ["type", "type out", "write"]:
             text = text.replace(prefix, "")
