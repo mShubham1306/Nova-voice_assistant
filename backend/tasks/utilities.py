@@ -19,8 +19,11 @@ class Utilities:
 
     def __init__(self, voice):
         self.voice = voice
-        os.makedirs(Config.OUTPUT_DIR, exist_ok=True)
-        os.makedirs(Config.NOTES_DIR, exist_ok=True)
+        try:
+            os.makedirs(Config.OUTPUT_DIR, exist_ok=True)
+            os.makedirs(Config.NOTES_DIR, exist_ok=True)
+        except OSError:
+            pass
 
     def take_screenshot(self):
         """Capture a screenshot and save it."""
