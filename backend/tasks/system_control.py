@@ -123,7 +123,14 @@ class SystemControl:
 
     def battery_status(self):
         """Get battery status."""
-        battery = psutil.sensors_battery()
+        try:
+            if psutil is None:
+                battery = None
+            else:
+                battery = psutil.sensors_battery()
+        except Exception:
+            battery = None
+
         if battery:
             percent = battery.percent
             plugged = "plugged in" if battery.power_plugged else "on battery"
@@ -141,7 +148,7 @@ class SystemControl:
             self.voice.speak(msg)
             return msg
         else:
-            self.voice.speak("No battery detected. This might be a desktop PC.")
+            self.voice.speak("No battery detected. This might be a desktop PC or serverless host.")
             return "No battery detected."
 
     def lock_screen(self):
