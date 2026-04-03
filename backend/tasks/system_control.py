@@ -183,6 +183,8 @@ class SystemControl:
 
     def system_info(self):
         """Get system information."""
+        if psutil is None:
+            return "System information is only available on desktop environments."
         import platform
         info = {
             "OS": f"{platform.system()} {platform.release()}",
@@ -198,6 +200,8 @@ class SystemControl:
 
     def cpu_usage(self):
         """Get current CPU usage."""
+        if psutil is None:
+            return "CPU metrics are unavailable on this server."
         usage = psutil.cpu_percent(interval=1)
         msg = f"CPU usage is at {usage}%."
         self.voice.speak(msg)
@@ -205,6 +209,8 @@ class SystemControl:
 
     def memory_usage(self):
         """Get current memory usage."""
+        if psutil is None:
+            return "Memory metrics are unavailable on this server."
         mem = psutil.virtual_memory()
         msg = f"Memory usage: {mem.percent}% used. {mem.available / (1024**3):.1f} GB available out of {mem.total / (1024**3):.1f} GB."
         self.voice.speak(msg)
@@ -212,6 +218,8 @@ class SystemControl:
 
     def disk_usage(self):
         """Get disk usage for all drives."""
+        if psutil is None:
+            return "Disk metrics are unavailable on this server."
         partitions = psutil.disk_partitions()
         results = []
         for p in partitions:

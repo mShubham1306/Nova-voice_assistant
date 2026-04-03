@@ -149,6 +149,8 @@ class Utilities:
             else:
                 self.voice.speak("Clipboard is empty.")
                 return "Clipboard is empty."
+        except FileNotFoundError:
+             return "Clipboard access is not available on this server."
         except Exception:
             return "Could not read clipboard."
 
