@@ -5,8 +5,11 @@ Handles OS-level operations: apps, volume, brightness, power, system info.
 
 import os
 import subprocess
-import psutil
 import socket
+try:
+    import psutil
+except ImportError:
+    psutil = None
 from config import Config
 
 

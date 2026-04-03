@@ -21,15 +21,20 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ── Lazy-load the assistant (avoids Windows-only imports crashing at startup) ──
 _assistant = None
+_assistant_error = None
 
 def get_assistant():
     global _assistant
+    global _assistant_error
     if _assistant is None:
         try:
             from core.assistant import Assistant
             _assistant = Assistant(socketio=None)
+            _assistant_error = None
         except Exception as e:
-            print(f"[Serverless] Could not init assistant: {e}")
+            import traceback
+            _assistant_error = traceback.format_exc()
+            print(f"[Serverless] Could not init assistant: {_assistant_error}")
     return _assistant
 
 
@@ -72,9 +77,10 @@ def command():
         return jsonify(result)
 
     # Fallback: no assistant available
+    err_str = globals().get('_assistant_error', 'Unknown Error')
     return jsonify({
-        "response": f"I heard you say: '{query}'. My AI core is warming up — make sure GEMINI_API_KEY is set in Vercel env vars!",
-        "type": "info"
+        "response": f"Vercel Deployment Error: {str(err_str)[:400]}... My AI core is warming up — make sure GEMINI_API_KEY is set in Vercel env vars!",
+        "type": "error"
     })
 
 
