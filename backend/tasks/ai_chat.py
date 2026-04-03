@@ -63,7 +63,7 @@ class AIChat:
             try:
                 genai.configure(api_key=Config.GEMINI_API_KEY)
                 self.model = genai.GenerativeModel(
-                    "gemini-1.5-flash",
+                    "gemini-2.0-flash",
                     system_instruction=MULTILINGUAL_SYSTEM_PROMPT
                 )
                 self.chat = self.model.start_chat(history=[])
