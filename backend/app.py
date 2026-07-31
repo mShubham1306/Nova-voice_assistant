@@ -67,11 +67,11 @@ def root():
 
 if __name__ == "__main__":
     print(f"""
-    ╔═══════════════════════════════════════════════════╗
-    ║     🚀 NOVA AI Operating Assistant 🚀            ║
-    ║     Running on http://{settings.HOST}:{settings.PORT}           ║
-    ║     Interactive Docs: http://localhost:{settings.PORT}/docs ║
-    ╚═══════════════════════════════════════════════════╝
+    ===================================================
+          NOVA AI Operating Assistant
+          Running on http://{settings.HOST}:{settings.PORT}
+          Interactive Docs: http://localhost:{settings.PORT}/docs
+    ===================================================
     """)
     uvicorn.run(
         "app:app",
