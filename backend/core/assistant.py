@@ -1,21 +1,7 @@
 """
-NOVA Assistant — Thin Orchestrator
-The central brain that wires all 3 layers together.
-
-Processing pipeline for every command:
-  1. Layer 1 — Fast Router (regex, <1ms, no API)
-     → Simple commands: volume, lock, screenshot, etc.
-
-  2. Layer 2 — Gemini Brain (function calling)
-     → Complex commands: "find my resume and open it", "start my project"
-
-  3. Layer 3 — Tool Registry
-     → Executes the tool + action returned by layers 1 or 2
-
-  4. Fallback — Direct AI chat
-     → Pure conversational responses (jokes, greetings, explanations)
-
-This class is intentionally thin — it delegates everything.
+NOVA Assistant — Thin Orchestrator (NOVA 3.0 Enterprise Architecture)
+Routes input through the 3-layer pipeline and passes all tool actions
+through the ExecutionEngine (Validation -> Safety Interceptor -> Retry -> Timeout -> Event Bus).
 """
 
 from __future__ import annotations
@@ -26,12 +12,16 @@ import threading
 from typing import Any
 
 from config import settings
-from core.router import fast_route
 from core.brain import Brain
+from core.event_bus import event_bus
+from core.execution_engine import execution_engine
 from core.memory import Memory
+from core.router import fast_route
+from core.task_manager import task_manager
 from core.voice_engine import VoiceEngine
-from tools.registry import ToolRegistry
 from tools.base_tool import ToolResult
+from tools.registry import registry
+
 
 logger = logging.getLogger("nova.assistant")
 
@@ -39,7 +29,8 @@ logger = logging.getLogger("nova.assistant")
 class Assistant:
     """
     NOVA's central command orchestrator.
-    Receives text commands, routes them, executes tools, and responds.
+    Receives text/voice commands, routes them, delegates execution to ExecutionEngine,
+    and publishes events to the EventBus.
     """
 
     def __init__(self, socketio=None) -> None:
@@ -49,45 +40,63 @@ class Assistant:
         self.wake_word_mode = False
         self._thread: threading.Thread | None = None
 
-        logger.info("[Assistant] Initializing NOVA...")
+        logger.info("[Assistant] Initializing NOVA 3.0 Core...")
 
-        # Initialize all subsystems
         self.voice = VoiceEngine(socketio)
-        self.registry = ToolRegistry()
+        self.registry = registry
         self.memory = Memory(settings.MEMORY_FILE)
         self.brain = Brain(self.registry.get_all_schemas())
+        self.execution_engine = execution_engine
+        self.event_bus = event_bus
+        self.task_manager = task_manager
 
-        logger.info("[Assistant] NOVA ready. %d tools loaded.", len(self.registry))
+        # Subscribe Memory to EventBus events for auto-logging
+        self.event_bus.subscribe("tool_executed", self._on_tool_executed_event)
+
+        logger.info("[Assistant] NOVA 3.0 ready. %d tools loaded.", len(self.registry))
+
+    def _on_tool_executed_event(self, event) -> None:
+        """Auto-log tool execution to memory."""
+        payload = event.payload
+        tool = payload.get("tool")
+        action = payload.get("action")
+        success = payload.get("success", False)
+        if tool and action:
+            self.memory.log_command(
+                query=f"{tool}.{action}",
+                result_type="success" if success else "error",
+                tool=f"{tool}.{action}",
+            )
 
     # ── Main Entry Point ──────────────────────────────────────────────────────
 
     def process_command(self, query: str, skip_speech: bool = False) -> dict:
         """
-        The 3-layer command processing pipeline.
-        Returns a uniform result dict for the API/WebSocket.
+        3-Layer Command Processing Pipeline:
+          Layer 1: Fast Router (sub-ms regex)
+          Layer 2: Gemini Brain (Function Calling)
+          Layer 3: ExecutionEngine (Validation, Safety Interceptor, Retries, Timeout, EventBus)
         """
         if not query or not query.strip():
             return self._build_response("I didn't catch that.", "error")
 
         original_query = query.strip()
         query_lower = original_query.lower()
-        timestamp = datetime.datetime.now().isoformat()
 
         if skip_speech:
             self.voice.muted = True
 
         try:
-            # ── Silent mode guard ─────────────────────────────────────────────
+            # ── Silent Mode ──────────────────────────────────────────────────
             if self.silent_mode:
-                wake_words = ["hey nova", "nova", "wake up", "hello nova", "i need you",
-                              "हे नोवा", "नोवा", "ノバ", "노바"]
+                wake_words = ["hey nova", "nova", "wake up", "hello nova", "i need you"]
                 if any(w in query_lower for w in wake_words):
                     self.silent_mode = False
                     self.voice.speak("I'm back! How can I help?")
                     return self._build_response("I'm awake and ready!", "wake")
                 return self._build_response("(silent mode)", "silent")
 
-            # ── Special commands ──────────────────────────────────────────────
+            # ── Control Directives ───────────────────────────────────────────
             if any(w in query_lower for w in ["stop nova", "exit nova", "quit nova", "goodbye nova"]):
                 self.voice.speak("Goodbye! Have a great day!")
                 self.is_running = False
@@ -98,55 +107,42 @@ class Assistant:
                 self.voice.speak("Going silent. Say 'Hey Nova' to wake me up.")
                 return self._build_response("Silent mode activated.", "silent")
 
-            if any(w in query_lower for w in ["reset memory", "clear memory", "forget everything"]):
-                self.memory.clear_session()
-                self.brain.reset_chat()
-                return self._build_response("Memory cleared. Starting fresh!", "success")
-
             # ── LAYER 1: Fast Router ──────────────────────────────────────────
             fast_result = fast_route(query_lower)
             if fast_result:
                 tool_name, action, params = fast_result
-                logger.info("[L1] Fast route → %s.%s", tool_name, action)
-                tool_result = self.registry.execute(tool_name, action, params)
+                logger.info("[L1] Fast route -> %s.%s", tool_name, action)
+
+                tool_result = self.execution_engine.execute_action(tool_name, action, params)
                 return self._handle_tool_result(tool_result, original_query, layer="fast_router")
 
             # ── LAYER 2: Gemini Brain ─────────────────────────────────────────
-            if self.brain.is_available:
-                context = self.memory.get_context_summary()
-                brain_response = self.brain.think(original_query, context)
+            context = self.memory.get_context_summary()
+            brain_response = self.brain.think(original_query, context)
 
-                if brain_response["type"] == "tool_call":
-                    tool_name = brain_response["tool"]
-                    action = brain_response["action"]
-                    params = brain_response.get("params", {})
-                    logger.info("[L2] Brain → %s.%s", tool_name, action)
+            if brain_response["type"] == "tool_call":
+                tool_name = brain_response["tool"]
+                action = brain_response["action"]
+                params = brain_response.get("params", {})
+                logger.info("[L2] Brain -> %s.%s", tool_name, action)
 
-                    tool_result = self.registry.execute(tool_name, action, params)
-                    return self._handle_tool_result(tool_result, original_query, layer="gemini_brain")
+                tool_result = self.execution_engine.execute_action(tool_name, action, params)
+                return self._handle_tool_result(tool_result, original_query, layer="gemini_brain")
 
-                elif brain_response["type"] == "text":
-                    # Pure conversational response
-                    text = brain_response["response"]
-                    self.voice.speak(text)
-                    self.memory.log_command(original_query, "ai_chat")
-                    return self._build_response(text, "ai_chat")
+            elif brain_response["type"] == "text":
+                text = brain_response["response"]
+                self.voice.speak(text)
+                self.memory.log_command(original_query, "ai_chat")
+                return self._build_response(text, "ai_chat")
 
-                else:
-                    # Brain error — fall through to direct AI chat
-                    pass
-
-            # ── LAYER 3 FALLBACK: Direct Gemini Chat (no tools) ───────────────
-            fallback_text = self.brain.simple_chat(original_query) if self.brain.is_available \
-                else "I didn't understand that. Try saying 'help' to see what I can do."
+            # ── LAYER 3 FALLBACK: Direct AI Chat ──────────────────────────────
+            fallback_text = self.brain.simple_chat(original_query)
             self.voice.speak(fallback_text)
-            self.memory.log_command(original_query, "ai_fallback")
             return self._build_response(fallback_text, "ai_chat")
 
         except Exception as exc:
-            logger.exception("[Assistant] Unhandled error for query '%s'", original_query)
-            err_msg = "Something went wrong. Please try again."
-            return self._build_response(err_msg, "error")
+            logger.exception("[Assistant] Unhandled error processing '%s'", original_query)
+            return self._build_response("Something went wrong. Please try again.", "error")
         finally:
             if skip_speech:
                 self.voice.muted = False
@@ -154,16 +150,14 @@ class Assistant:
     # ── Tool Result Handling ──────────────────────────────────────────────────
 
     def _handle_tool_result(self, result: ToolResult, query: str, layer: str) -> dict:
-        """Process a ToolResult — speak, log, emit, and build the API response."""
         if result.speak and not self.voice.muted:
             self.voice.speak(result.message)
 
-        self.memory.log_command(query, "tool" if result.success else "error", result.action_taken)
         self._emit("command_result", result.to_dict())
 
         return {
             "response": result.message,
-            "type": "success" if result.success else "error",
+            "type": "success" if result.success else ("confirm" if result.requires_confirmation else "error"),
             "tool": result.action_taken,
             "layer": layer,
             "data": result.data,
@@ -184,8 +178,7 @@ class Assistant:
         while self.is_running:
             try:
                 if self.wake_word_mode:
-                    activated = self.voice.listen_for_wake_word()
-                    if not activated:
+                    if not self.voice.listen_for_wake_word():
                         continue
 
                 query = self.voice.listen()
@@ -222,6 +215,7 @@ class Assistant:
             "wake_word_mode": self.wake_word_mode,
             "brain_available": self.brain.is_available,
             "tools_loaded": len(self.registry),
+            "pending_confirmations": len(self.execution_engine.get_pending_confirmations()),
             "name": settings.ASSISTANT_NAME,
             "commands_this_session": self.memory.get_session("command_count", 0),
         }
@@ -231,8 +225,6 @@ class Assistant:
 
     def get_memory(self) -> dict:
         return self.memory.get_full_status()
-
-    # ── Emit Helper ───────────────────────────────────────────────────────────
 
     def _emit(self, event: str, data: Any) -> None:
         if self.socketio:

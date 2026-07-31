@@ -106,11 +106,16 @@ class BaseTool(ABC):
     actions: list[str] = []
 
     #: Per-action parameter schemas for Gemini function calling
-    #: Format: { "action_name": { "param_name": param(...) } }
     parameters: dict[str, dict[str, dict]] = {}
 
     #: Actions that need confirmation before executing (e.g. delete, shutdown)
     dangerous_actions: list[str] = []
+
+    #: Plugin Version (default 2.0.0)
+    version: str = "2.0.0"
+
+    #: Execution Priority (1-100, higher = tried first if tools conflict)
+    priority: int = 50
 
     # ── Interface ────────────────────────────────────────────────────────────
 
@@ -120,6 +125,25 @@ class BaseTool(ABC):
         Route the action to the correct internal method.
         All tools must implement this as their single public entry point.
         """
+
+    def dependencies_satisfied(self) -> tuple[bool, str]:
+        """Check if all OS/Python dependencies for this tool are met."""
+        return True, "All dependencies met."
+
+    def health(self) -> dict:
+        """Return diagnostic health check metadata for this tool."""
+        satisfied, reason = self.dependencies_satisfied()
+        status = "healthy" if satisfied else "degraded"
+        return {
+            "name": self.name,
+            "version": self.version,
+            "priority": self.priority,
+            "status": status,
+            "reason": reason,
+            "action_count": len(self.actions),
+            "dangerous_actions": self.dangerous_actions,
+        }
+
 
     # ── Auto-derived helpers ─────────────────────────────────────────────────
 
