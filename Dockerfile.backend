@@ -1,0 +1,36 @@
+# ─── NOVA Backend — Render.com Deployment ──────────────────────────────────
+# Serves ONLY the FastAPI backend (no frontend static files).
+# Frontend is served separately on Vercel.
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies for audio (pyttsx3/espeak), PortAudio (sounddevice),
+# and build tools. On Render, audio won't actually play but imports won't crash.
+RUN apt-get update && apt-get install -y \
+    gcc \
+    portaudio19-dev \
+    libespeak-ng1 \
+    espeak-ng \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend source code
+COPY backend/ ./backend/
+
+# Create writable data directories
+RUN mkdir -p /tmp/nova_data/notes /tmp/nova_data/screenshots /tmp/nova_data/workflows
+
+# Environment
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Render provides $PORT dynamically (default 10000)
+EXPOSE 10000
+
+CMD uvicorn backend.app:app --host 0.0.0.0 --port ${PORT:-10000}

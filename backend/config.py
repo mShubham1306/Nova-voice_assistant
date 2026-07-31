@@ -22,7 +22,13 @@ class Settings(BaseSettings):
     PORT: int = 5000
     DEBUG: bool = True
     SECRET_KEY: str = "nova-super-secret-key-change-in-production"
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000", "*"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://*.vercel.app",
+        "https://nova-voice-assistant-two.vercel.app",
+        "*",
+    ]
 
     # ── Voice Engine ──────────────────────────────────────────────────────────
     VOICE_RATE: int = 180
