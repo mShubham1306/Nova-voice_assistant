@@ -52,7 +52,7 @@ docker-compose up --build
 builder = "dockerfile"
 
 [deploy]
-startCommand = "python -m flask run --host=0.0.0.0 --port=$PORT"
+startCommand = "uvicorn backend.app:app --host 0.0.0.0 --port=$PORT"
 ```
 
 ---

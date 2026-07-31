@@ -64,7 +64,10 @@ class WorkflowTool(BaseTool):
         from config import settings
         self._settings = settings
         self._workflows_dir = settings.DATA_DIR / "workflows"
-        self._workflows_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self._workflows_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
 
     def _load_workflow(self, workflow_id: str) -> dict | None:
         """Load declarative workflow JSON file by ID."""

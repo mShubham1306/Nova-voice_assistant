@@ -22,8 +22,11 @@ def init_assistant(assistant) -> None:
 
 
 def _get_assistant():
+    global _assistant
     if _assistant is None:
-        raise HTTPException(status_code=503, detail="Assistant not initialized.")
+        from core.assistant import Assistant
+        _assistant = Assistant()
+        init_assistant(_assistant)
     return _assistant
 
 
@@ -220,3 +223,86 @@ def clear_memory():
     a.memory.clear_persistent()
     a.brain.reset_chat()
     return {"status": "cleared", "message": "All memory cleared."}
+
+
+# ── Metadata & Configuration Endpoints ────────────────────────────────────────
+
+@router.get("/features")
+def get_features():
+    """Get NOVA features and command capabilities."""
+    return {
+        "categories": [
+            {
+                "name": "AI Chat",
+                "icon": "🤖",
+                "color": "#8b5cf6",
+                "commands": [
+                    {"cmd": "Tell me about black holes", "desc": "Ask anything"},
+                    {"cmd": "Explain quantum computing", "desc": "Deep explanations"},
+                    {"cmd": "How to learn Python?", "desc": "Get advice"},
+                    {"cmd": "Who are you?", "desc": "Meet Nova"},
+                ]
+            },
+            {
+                "name": "Web & Search",
+                "icon": "🌐",
+                "color": "#06b6d4",
+                "commands": [
+                    {"cmd": "Search Google for...", "desc": "Google search"},
+                    {"cmd": "Search YouTube for...", "desc": "YouTube search"},
+                    {"cmd": "Wikipedia...", "desc": "Look up Wikipedia"},
+                    {"cmd": "Open website...", "desc": "Visit any site"},
+                ]
+            },
+            {
+                "name": "Information",
+                "icon": "📚",
+                "color": "#10b981",
+                "commands": [
+                    {"cmd": "What time is it?", "desc": "Current time"},
+                    {"cmd": "What's the date?", "desc": "Today's date"},
+                    {"cmd": "Weather in London", "desc": "Weather updates"},
+                    {"cmd": "Tell me a joke", "desc": "Random humor"},
+                    {"cmd": "Fun fact", "desc": "Interesting facts"},
+                    {"cmd": "Motivational quote", "desc": "Get inspired"},
+                    {"cmd": "Flip a coin", "desc": "Heads or tails"},
+                    {"cmd": "Roll a dice", "desc": "Random 1-6"},
+                ]
+            },
+            {
+                "name": "Utilities",
+                "icon": "🛠️",
+                "color": "#f59e0b",
+                "commands": [
+                    {"cmd": "Calculate 5 plus 3", "desc": "Math calculations"},
+                    {"cmd": "Take note...", "desc": "Save a note"},
+                ]
+            },
+        ],
+        "total_commands": 20,
+        "wake_word": "Hey Nova",
+    }
+
+
+@router.get("/languages")
+def get_languages():
+    """Get supported language mappings."""
+    langs = {
+        "hi": "Hindi", "gu": "Gujarati", "bn": "Bengali", "ta": "Tamil",
+        "te": "Telugu", "kn": "Kannada", "ml": "Malayalam", "mr": "Marathi",
+        "pa": "Punjabi", "en": "English", "fr": "French", "de": "German",
+        "es": "Spanish", "it": "Italian", "pt": "Portuguese", "ru": "Russian",
+        "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "ar": "Arabic",
+    }
+    return {
+        "languages": langs,
+        "total": len(langs),
+        "description": "Nova understands 40+ languages. Speak or type — Nova auto-detects and replies in the same language."
+    }
+
+
+@router.post("/wake-word")
+def toggle_wake_word():
+    """Toggle wake word status."""
+    return {"wake_word_mode": False, "message": "Wake word runs client-side in the browser."}
+

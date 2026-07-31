@@ -7,7 +7,7 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - FLASK_ENV=development
+      - ENVIRONMENT=development
       - DEBUG=True
       - SECRET_KEY=dev-secret-key-change-in-production
       - GEMINI_API_KEY=${GEMINI_API_KEY}
@@ -16,7 +16,7 @@ services:
     volumes:
       - ./backend:/app/backend
       - ./frontend:/app/frontend
-    command: python -m flask run --host=0.0.0.0
+    command: uvicorn backend.app:app --host 0.0.0.0 --port 5000
 
 # For production, use:
 # docker-compose -f docker-compose.prod.yml up

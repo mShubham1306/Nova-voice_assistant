@@ -109,7 +109,25 @@ class Settings(BaseSettings):
 settings = Settings()
 Config = settings  # Alias for backward compatibility
 
-# Ensure data directories exist
+# Ensure data directories exist (with fallback for read-only serverless environments like Vercel/AWS Lambda)
+is_serverless = bool(
+    os.getenv("VERCEL")
+    or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
+    or os.path.exists("/var/task")
+    or not os.access(str(BASE_DIR), os.W_OK)
+)
+
+if is_serverless:
+    tmp_data = Path("/tmp/nova_data")
+    settings.DATA_DIR = tmp_data
+    settings.NOTES_DIR = tmp_data / "notes"
+    settings.SCREENSHOTS_DIR = tmp_data / "screenshots"
+    settings.MEMORY_FILE = tmp_data / "memory.json"
+
 for _dir in [settings.DATA_DIR, settings.NOTES_DIR, settings.SCREENSHOTS_DIR]:
-    _dir.mkdir(parents=True, exist_ok=True)
+    try:
+        _dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
 

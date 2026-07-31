@@ -1,5 +1,5 @@
 # Build stage for frontend
-FROM node:18-alpine AS frontend-build
+FROM node:20-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
@@ -31,7 +31,7 @@ COPY --from=frontend-build /app/frontend/dist ./backend/static
 RUN mkdir -p ./backend/output ./backend/notes
 
 # Set environment variables
-ENV FLASK_APP=backend/app.py
+ENV PYTHONPATH=/app/backend
 ENV PYTHONUNBUFFERED=1
 ENV HOST=0.0.0.0
 ENV PORT=5000
@@ -40,4 +40,4 @@ ENV PORT=5000
 EXPOSE 5000
 
 # Start the application
-CMD ["python", "-m", "flask", "run", "--host=0.0.0.0"]
+CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "5000"]

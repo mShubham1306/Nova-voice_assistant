@@ -233,7 +233,7 @@ git push origin main
 - [Railway Docs](https://docs.railway.app)
 - [Render Docs](https://render.com/docs)
 - [Vercel Docs](https://vercel.com/docs)
-- [Flask Docker Best Practices](https://flask.palletsprojects.com/deploying/)
+- [FastAPI Deployment Docs](https://fastapi.tiangolo.com/deployment/)
 
 ---
 
