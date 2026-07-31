@@ -1,43 +1,49 @@
-# Build stage for frontend
+# ─── Stage 1: Build Frontend ──────────────────────────────────────────────────
 FROM node:20-alpine AS frontend-build
+
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-# Runtime stage
+# ─── Stage 2: Python Backend Runtime ─────────────────────────────────────────
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies for audio (portaudio), GUI (xvfb, scrot),
+# and build tools (gcc). These are needed by pyttsx3, sounddevice, pyautogui.
 RUN apt-get update && apt-get install -y \
     gcc \
     portaudio19-dev \
+    libespeak-ng1 \
+    espeak-ng \
+    libxcb-xinerama0 \
+    scrot \
+    python3-xlib \
+    xvfb \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy backend requirements
-COPY backend/requirements.txt ./
+# Copy and install Python dependencies
+COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend code
+# Copy backend source
 COPY backend/ ./backend/
 
-# Copy built frontend from build stage
+# Copy pre-built frontend
 COPY --from=frontend-build /app/frontend/dist ./backend/static
 
-# Create necessary directories
-RUN mkdir -p ./backend/output ./backend/notes
+# Create writable data directories
+RUN mkdir -p ./backend/data/notes ./backend/data/screenshots ./backend/data/workflows
 
-# Set environment variables
-ENV PYTHONPATH=/app/backend
+# Environment
+ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV HOST=0.0.0.0
 ENV PORT=5000
 
-# Expose port
 EXPOSE 5000
 
-# Start the application
 CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "5000"]

@@ -1,0 +1,28 @@
+# ─── CI-only requirements (no audio/GUI system deps needed) ──────────────────
+# These are the pure-Python packages needed to run backend tests in GitHub CI.
+# Audio, TTS, and desktop automation libs are excluded — they have graceful
+# fallbacks in the codebase (try/except import guards).
+
+# ─── Web Framework ────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn>=0.29.0
+python-multipart>=0.0.9
+websockets>=12.0
+starlette>=0.37.2
+
+# ─── AI / LLM ─────────────────────────────────────────────
+google-generativeai>=0.7.2
+
+# ─── System Utilities ─────────────────────────────────────
+psutil>=5.9.8
+
+# ─── File Operations ──────────────────────────────────────
+send2trash>=1.8.3
+filetype>=1.2.0
+
+# ─── Utilities ────────────────────────────────────────────
+python-dotenv>=1.0.1
+requests>=2.32.3
+aiofiles>=23.2.1
+pydantic>=2.7.1
+pydantic-settings>=2.3.1
