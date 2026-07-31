@@ -55,4 +55,6 @@ dist/
 __pycache__/
 *.pyc
 backend/__pycache__/
+backend/data/
+
 

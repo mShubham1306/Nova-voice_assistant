@@ -1,81 +1,81 @@
 """
-NOVA Voice Assistant - Flask Application Entry Point
+NOVA Voice Assistant - FastAPI Application Entry Point
+Refactored, high-performance, async-enabled AI Operating Assistant.
 """
 
-from flask import Flask
-from flask_cors import CORS
-from flask_socketio import SocketIO
-from config import Config
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from config import settings
 from core.assistant import Assistant
-from routes.api import api_bp, init_assistant
-import os
+from routes.api import router as api_router, init_assistant
+from routes.ws import ws_router, init_ws_assistant
+import uvicorn
+import logging
 
-# Create Flask app
-app = Flask(__name__)
-app.config["SECRET_KEY"] = Config.SECRET_KEY
+logging.basicConfig(
+    level=logging.INFO if settings.DEBUG else logging.WARNING,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("nova.app")
 
-# Enable CORS for React frontend
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+# Shared assistant instance
+assistant: Assistant = None
 
-# Initialize SocketIO for real-time events
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global assistant
+    logger.info("Initializing NOVA Assistant Core...")
+    assistant = Assistant()
+    init_assistant(assistant)
+    init_ws_assistant(assistant)
+    yield
+    logger.info("Shutting down NOVA Assistant Core...")
+    if assistant and assistant.is_running:
+        assistant.stop()
 
-# Create output directories
-os.makedirs(Config.OUTPUT_DIR, exist_ok=True)
-os.makedirs(Config.NOTES_DIR, exist_ok=True)
+# Initialize FastAPI application
+app = FastAPI(
+    title="NOVA AI Operating Assistant",
+    description="Tool-based AI Operating Assistant powered by Gemini Function Calling & Plugin Architecture",
+    version="2.0.0",
+    lifespan=lifespan
+)
 
-# Initialize assistant with socketio
-assistant = Assistant(socketio=socketio)
-init_assistant(assistant)
+# Enable CORS for React/Vite Frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Register blueprints
-app.register_blueprint(api_bp)
+# Register routers
+app.include_router(api_router)
+app.include_router(ws_router)
 
-
-# SocketIO event handlers
-@socketio.on("connect")
-def handle_connect():
-    print("[WS] Client connected")
-    socketio.emit("connected", {"name": Config.ASSISTANT_NAME, "status": "ready"})
-
-
-@socketio.on("disconnect")
-def handle_disconnect():
-    print("[WS] Client disconnected")
-
-
-@socketio.on("voice_command")
-def handle_voice_command(data):
-    """Handle voice command from frontend."""
-    query = data.get("query", "")
-    if query:
-        result = assistant.process_command(query)
-        socketio.emit("command_result", result)
-
-
-@socketio.on("start_listening")
-def handle_start_listening():
-    """Start voice listening from frontend trigger."""
-    assistant.start()
-
-
-@socketio.on("stop_listening")
-def handle_stop_listening():
-    """Stop voice listening."""
-    assistant.stop()
-
-
-# Health check
-@app.route("/health")
-def health():
-    return {"status": "healthy", "name": Config.ASSISTANT_NAME}
-
+@app.get("/")
+def root():
+    return {
+        "name": settings.ASSISTANT_NAME,
+        "role": "AI Operating Assistant",
+        "version": "2.0.0",
+        "docs": "/docs",
+        "status": "online"
+    }
 
 if __name__ == "__main__":
     print(f"""
-    ╔══════════════════════════════════════╗
-    ║     🚀 NOVA Voice Assistant 🚀      ║
-    ║     Running on port {Config.PORT}            ║
-    ╚══════════════════════════════════════╝
+    ╔═══════════════════════════════════════════════════╗
+    ║     🚀 NOVA AI Operating Assistant 🚀            ║
+    ║     Running on http://{settings.HOST}:{settings.PORT}           ║
+    ║     Interactive Docs: http://localhost:{settings.PORT}/docs ║
+    ╚═══════════════════════════════════════════════════╝
     """)
-    socketio.run(app, host=Config.HOST, port=Config.PORT, debug=Config.DEBUG, allow_unsafe_werkzeug=True)
+    uvicorn.run(
+        "app:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.DEBUG
+    )

@@ -1,194 +1,199 @@
 """
-NOVA API Routes - REST endpoints and WebSocket events
+NOVA API Routes — FastAPI router
+REST endpoints for the NOVA voice assistant backend.
 """
 
-from flask import Blueprint, jsonify, request
+from __future__ import annotations
 
-api_bp = Blueprint("api", __name__, url_prefix="/api")
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from pydantic import BaseModel
+from typing import Any
 
-# Will be set by app.py
+router = APIRouter(prefix="/api", tags=["nova"])
+
+# Injected by app.py at startup
 _assistant = None
 
 
-def init_assistant(assistant):
-    """Initialize the shared assistant instance."""
+def init_assistant(assistant) -> None:
     global _assistant
     _assistant = assistant
 
 
-@api_bp.route("/health", methods=["GET"])
+def _get_assistant():
+    if _assistant is None:
+        raise HTTPException(status_code=503, detail="Assistant not initialized.")
+    return _assistant
+
+
+# ── Request Models ────────────────────────────────────────────────────────────
+
+class CommandRequest(BaseModel):
+    query: str
+    skip_speech: bool = True  # Text commands skip TTS by default
+
+
+class ToolCallRequest(BaseModel):
+    tool: str
+    action: str
+    params: dict[str, Any] = {}
+
+
+class MemorySetRequest(BaseModel):
+    key: str
+    value: Any
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@router.get("/health")
 def health_check():
-    """Health check endpoint for deployment monitoring."""
-    return jsonify({"status": "healthy", "service": "NOVA Voice Assistant"}), 200
-
-
-@api_bp.route("/status", methods=["GET"])
-def get_status():
-    """Get assistant status."""
-    if _assistant:
-        return jsonify(_assistant.get_status())
-    return jsonify({"is_running": False, "name": "Nova"})
-
-
-@api_bp.route("/start", methods=["POST"])
-def start_assistant():
-    """Start voice assistant."""
-    if _assistant:
-        result = _assistant.start()
-        return jsonify(result)
-    return jsonify({"error": "Assistant not initialized"}), 500
-
-
-@api_bp.route("/stop", methods=["POST"])
-def stop_assistant():
-    """Stop voice assistant."""
-    if _assistant:
-        result = _assistant.stop()
-        return jsonify(result)
-    return jsonify({"error": "Assistant not initialized"}), 500
-
-
-@api_bp.route("/command", methods=["POST"])
-def send_command():
-    """Send a text command to the assistant.
-    Text commands skip TTS for instant response.
-    """
-    data = request.get_json()
-    query = data.get("query", "") if data else ""
-
-    if not query:
-        return jsonify({"error": "No command provided"}), 400
-
-    if _assistant:
-        result = _assistant.process_command(query, skip_speech=True)
-        return jsonify(result)
-
-    return jsonify({"error": "Assistant not initialized"}), 500
-
-
-@api_bp.route("/history", methods=["GET"])
-def get_history():
-    """Get command history."""
-    if _assistant:
-        return jsonify({"history": _assistant.get_history()})
-    return jsonify({"history": []})
-
-
-@api_bp.route("/features", methods=["GET"])
-def get_features():
-    """Get list of all supported features/commands."""
-    features = {
-        "categories": [
-            {
-                "name": "System Control",
-                "icon": "⚙️",
-                "color": "#6366f1",
-                "commands": [
-                    {"cmd": "Open Chrome", "desc": "Launch applications"},
-                    {"cmd": "Close Notepad", "desc": "Close running apps"},
-                    {"cmd": "Volume up/down", "desc": "Control volume"},
-                    {"cmd": "Brightness up/down", "desc": "Adjust brightness"},
-                    {"cmd": "Battery status", "desc": "Check battery level"},
-                    {"cmd": "Lock screen", "desc": "Lock your PC"},
-                    {"cmd": "System info", "desc": "Get PC info"},
-                    {"cmd": "CPU/RAM/Disk usage", "desc": "System diagnostics"},
-                    {"cmd": "IP address", "desc": "Get your IP"},
-                    {"cmd": "Wi-Fi status", "desc": "Check internet"},
-                    {"cmd": "Shutdown/Restart", "desc": "Power controls"},
-                    {"cmd": "Empty recycle bin", "desc": "Clean up storage"},
-                ]
-            },
-            {
-                "name": "Web & Search",
-                "icon": "🌐",
-                "color": "#06b6d4",
-                "commands": [
-                    {"cmd": "Search Google for...", "desc": "Google search"},
-                    {"cmd": "Search YouTube for...", "desc": "YouTube search"},
-                    {"cmd": "Wikipedia...", "desc": "Look up Wikipedia"},
-                    {"cmd": "Stack Overflow...", "desc": "Find code answers"},
-                    {"cmd": "Open website...", "desc": "Visit any site"},
-                ]
-            },
-            {
-                "name": "Media Control",
-                "icon": "🎵",
-                "color": "#8b5cf6",
-                "commands": [
-                    {"cmd": "Play/Pause music", "desc": "Toggle playback"},
-                    {"cmd": "Next/Previous song", "desc": "Switch tracks"},
-                ]
-            },
-            {
-                "name": "Utilities",
-                "icon": "🛠️",
-                "color": "#f59e0b",
-                "commands": [
-                    {"cmd": "Take screenshot", "desc": "Capture screen"},
-                    {"cmd": "Set timer for 5 minutes", "desc": "Countdown timer"},
-                    {"cmd": "Set alarm", "desc": "Wake-up alarm"},
-                    {"cmd": "Calculate 5 plus 3", "desc": "Math calculations"},
-                    {"cmd": "Take note...", "desc": "Save a note"},
-                    {"cmd": "Read notes", "desc": "View saved notes"},
-                    {"cmd": "Clipboard", "desc": "Read clipboard"},
-                    {"cmd": "Type...", "desc": "Auto-type text"},
-                ]
-            },
-            {
-                "name": "Information",
-                "icon": "📚",
-                "color": "#10b981",
-                "commands": [
-                    {"cmd": "What time is it?", "desc": "Current time"},
-                    {"cmd": "What's the date?", "desc": "Today's date"},
-                    {"cmd": "Weather in London", "desc": "Weather updates"},
-                    {"cmd": "News", "desc": "Top headlines"},
-                    {"cmd": "Tell me a joke", "desc": "Random humor"},
-                    {"cmd": "Fun fact", "desc": "Interesting facts"},
-                    {"cmd": "Define serendipity", "desc": "Word definitions"},
-                    {"cmd": "Translate hello", "desc": "Google Translate"},
-                    {"cmd": "Motivational quote", "desc": "Get inspired"},
-                    {"cmd": "Flip a coin", "desc": "Heads or tails"},
-                    {"cmd": "Roll a dice", "desc": "Random 1-6"},
-                ]
-            },
-            {
-                "name": "AI Chat",
-                "icon": "🤖",
-                "color": "#ec4899",
-                "commands": [
-                    {"cmd": "Tell me about black holes", "desc": "Ask anything"},
-                    {"cmd": "Explain quantum computing", "desc": "Deep explanations"},
-                    {"cmd": "How to learn Python?", "desc": "Get advice"},
-                    {"cmd": "Who are you?", "desc": "Meet Nova"},
-                ]
-            },
-        ],
-        "total_commands": 45,
-        "wake_word": "Hey Nova",
+    """Health check for load balancers and monitoring."""
+    a = _assistant
+    return {
+        "status": "healthy",
+        "service": "NOVA AI Operating Assistant",
+        "brain_available": a.brain.is_available if a else False,
+        "tools_loaded": len(a.registry) if a else 0,
     }
-    return jsonify(features)
 
 
-@api_bp.route("/wake-word", methods=["POST"])
+@router.get("/status")
+def get_status():
+    """Get full assistant status."""
+    return _get_assistant().get_status()
+
+
+@router.post("/start")
+def start_assistant():
+    """Start voice listening loop."""
+    return _get_assistant().start()
+
+
+@router.post("/stop")
+def stop_assistant():
+    """Stop voice listening loop."""
+    return _get_assistant().stop()
+
+
+@router.post("/command")
+def send_command(body: CommandRequest):
+    """
+    Send a text command to NOVA.
+    Routes through the 3-layer pipeline (fast router → brain → tool registry).
+    """
+    if not body.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+    return _get_assistant().process_command(body.query, skip_speech=body.skip_speech)
+
+
+@router.post("/tool")
+def call_tool_directly(body: ToolCallRequest):
+    """
+    Directly call a specific tool action — bypasses Gemini entirely.
+    Useful for frontend buttons and confirmed actions.
+    """
+    a = _get_assistant()
+    result = a.registry.execute(body.tool, body.action, body.params)
+    return result.to_dict()
+
+
+@router.get("/tools")
+def list_tools():
+    """List all registered tools and their actions."""
+    return {
+        "tools": _get_assistant().registry.list_tools(),
+        "total": len(_get_assistant().registry),
+    }
+
+
+@router.get("/tools/{tool_name}/schema")
+def get_tool_schema(tool_name: str):
+    """Get the Gemini function-calling schema for a specific tool."""
+    a = _get_assistant()
+    tool = a.registry.get_tool(tool_name)
+    if not tool:
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found.")
+    return tool.get_schema()
+
+
+@router.get("/history")
+def get_history():
+    """Get recent command history (last 50)."""
+    return {"history": _get_assistant().get_history()}
+
+
+@router.get("/memory")
+def get_memory():
+    """Get current memory state (session + persistent)."""
+    return _get_assistant().get_memory()
+
+
+@router.delete("/memory")
+def clear_memory():
+    """Clear all memory (session and persistent)."""
+    a = _get_assistant()
+    a.memory.clear_session()
+    a.memory.clear_persistent()
+    a.brain.reset_chat()
+    return {"status": "cleared", "message": "All memory has been cleared."}
+
+
+@router.post("/memory")
+def set_memory(body: MemorySetRequest):
+    """Set a persistent memory value."""
+    _get_assistant().memory.set(body.key, body.value)
+    return {"status": "saved", "key": body.key}
+
+
+@router.post("/wake-word")
 def toggle_wake_word():
-    """Toggle wake word mode."""
-    if _assistant:
-        _assistant.wake_word_mode = not _assistant.wake_word_mode
-        return jsonify({
-            "wake_word_mode": _assistant.wake_word_mode,
-            "message": f"Wake word mode {'enabled' if _assistant.wake_word_mode else 'disabled'}."
+    """Toggle wake word listening mode."""
+    a = _get_assistant()
+    a.wake_word_mode = not a.wake_word_mode
+    return {
+        "wake_word_mode": a.wake_word_mode,
+        "message": f"Wake word mode {'enabled' if a.wake_word_mode else 'disabled'}.",
+    }
+
+
+@router.post("/reset-chat")
+def reset_chat():
+    """Reset Gemini conversation history."""
+    _get_assistant().brain.reset_chat()
+    return {"status": "reset", "message": "Conversation history cleared."}
+
+
+@router.get("/features")
+def get_features():
+    """Get all NOVA features grouped by tool for the frontend."""
+    a = _get_assistant()
+    categories = []
+    tool_meta = {
+        "system_tool":   {"icon": "⚙️",  "color": "#6366f1", "label": "System Control"},
+        "file_tool":     {"icon": "📁",  "color": "#f59e0b", "label": "File Manager"},
+        "browser_tool":  {"icon": "🌐",  "color": "#06b6d4", "label": "Web & Search"},
+        "media_tool":    {"icon": "🎵",  "color": "#8b5cf6", "label": "Media Control"},
+        "utility_tool":  {"icon": "🛠️",  "color": "#10b981", "label": "Utilities"},
+        "info_tool":     {"icon": "📚",  "color": "#ec4899", "label": "Information"},
+        "notes_tool":    {"icon": "📝",  "color": "#84cc16", "label": "Smart Notes"},
+        "dev_tool":      {"icon": "💻",  "color": "#f97316", "label": "Developer"},
+        "workflow_tool": {"icon": "⚡",  "color": "#a855f7", "label": "Workflows"},
+    }
+    for t in a.registry.list_tools():
+        meta = tool_meta.get(t["name"], {"icon": "🔧", "color": "#64748b", "label": t["name"]})
+        categories.append({
+            "name": meta["label"],
+            "tool": t["name"],
+            "icon": meta["icon"],
+            "color": meta["color"],
+            "description": "",
+            "actions": t["actions"],
+            "action_count": len(t["actions"]),
         })
-    return jsonify({"error": "Assistant not initialized"}), 500
-
-
-@api_bp.route("/languages", methods=["GET"])
-def get_languages():
-    """Get list of all supported languages."""
-    from tasks.ai_chat import SUPPORTED_LANGUAGES
-    return jsonify({
-        "languages": SUPPORTED_LANGUAGES,
-        "total": len(SUPPORTED_LANGUAGES),
-        "description": "Nova understands and responds in 40+ Indian and global languages. Simply speak or type in your preferred language — Nova auto-detects and replies in the same language."
-    })
-
+    return {
+        "categories": categories,
+        "total_tools": len(categories),
+        "total_actions": sum(c["action_count"] for c in categories),
+        "brain_enabled": a.brain.is_available,
+    }
