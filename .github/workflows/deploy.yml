@@ -1,4 +1,4 @@
-name: CI & Deployment Pipeline
+name: CI — Build & Test
 
 on:
   push:
@@ -9,16 +9,16 @@ on:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
-  # JOB 1: Backend Python Tests
-  # Uses requirements-ci.txt (no audio/GUI system deps — all have graceful
-  # try/except fallbacks in the codebase, so tests pass without them).
+  # JOB 1: Python Backend Tests
+  # Uses requirements-ci.txt — pure Python only, no audio/GUI system libraries.
+  # All audio/TTS imports have try/except fallbacks so tests pass without them.
   # ─────────────────────────────────────────────────────────────────────────────
   backend-tests:
-    name: Backend Tests (Python 3.11)
+    name: 🐍 Backend Tests
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python 3.11
@@ -30,21 +30,22 @@ jobs:
       - name: Install CI dependencies
         run: pip install -r requirements-ci.txt
 
-      - name: Run NOVA 3.0 Verification Tests
-        run: |
-          python backend/tests/test_v3.py
-          python backend/tests/test_backend.py
+      - name: Run NOVA 3.0 Enterprise Tests
+        run: python backend/tests/test_v3.py
+
+      - name: Run Backend Verification Tests
+        run: python backend/tests/test_backend.py
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # JOB 2: Frontend Build Test
-  # Ensures Vite + React build compiles cleanly with Node 20.
+  # JOB 2: Frontend Build
+  # Verifies Vite + React compiles cleanly with Node 20 (Vite 8 requirement).
   # ─────────────────────────────────────────────────────────────────────────────
   frontend-build:
-    name: Frontend Build (Node 20)
+    name: ⚛️ Frontend Build
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Node.js 20
@@ -55,58 +56,23 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
+        working-directory: frontend
         run: npm ci
-        working-directory: frontend
 
-      - name: Build frontend
+      - name: Build production bundle
+        working-directory: frontend
         run: npm run build
+
+      - name: Report bundle size
         working-directory: frontend
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # JOB 3: Deploy to Vercel
-  # Only runs on main branch pushes if VERCEL_TOKEN secret is configured.
-  # If secret is absent, Vercel's native GitHub Integration handles auto-deploy.
-  # ─────────────────────────────────────────────────────────────────────────────
-  deploy-vercel:
-    name: Deploy to Vercel
-    needs: [backend-tests, frontend-build]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy to Vercel
-        if: ${{ secrets.VERCEL_TOKEN != '' }}
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod'
-
-      - name: Note (Vercel auto-deploy)
-        if: ${{ secrets.VERCEL_TOKEN == '' }}
-        run: echo "ℹ️ VERCEL_TOKEN not set. Vercel auto-deploys on push via its GitHub Integration."
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # JOB 4: Deploy to Railway (optional)
-  # Only runs if RAILWAY_TOKEN secret is configured.
-  # ─────────────────────────────────────────────────────────────────────────────
-  deploy-railway:
-    name: Deploy to Railway
-    needs: [backend-tests, frontend-build]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.RAILWAY_TOKEN != ''
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy to Railway
         run: |
-          npm install -g @railway/cli
-          railway up --detach
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          echo "📦 Build output:"
+          ls -lh dist/assets/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEPLOYMENT NOTE:
+# ✅ Vercel auto-deploys on every push to main via its GitHub Integration.
+#    No VERCEL_TOKEN needed in CI. Configure at: https://vercel.com/dashboard
+# ✅ Railway auto-deploys on every push to main via its GitHub Integration.
+#    No RAILWAY_TOKEN needed in CI. Configure at: https://railway.app/dashboard
+# ─────────────────────────────────────────────────────────────────────────────
