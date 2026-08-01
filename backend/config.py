@@ -7,7 +7,7 @@ import os
 import json
 from pathlib import Path
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
 
 
 BASE_DIR = Path(__file__).parent
@@ -52,6 +52,38 @@ class Settings(BaseSettings):
         validation_alias="CORS_ORIGINS",
         serialization_alias="CORS_ORIGINS",
     )
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def _parse_debug(cls, v: Any) -> bool:
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, (int, float)):
+            return bool(v)
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in ("true", "1", "t", "yes", "y", "on"):
+                return True
+            if s in ("false", "0", "f", "no", "n", "off", "debug"):
+                return False
+        return False
+
+    @field_validator("PORT", "VOICE_RATE", "LISTEN_TIMEOUT", "PHRASE_TIME_LIMIT", "GEMINI_MAX_TOKENS", mode="before")
+    @classmethod
+    def _parse_int(cls, v: Any, info) -> int:
+        if isinstance(v, int):
+            return v
+        try:
+            return int(str(v).strip())
+        except (ValueError, TypeError):
+            defaults = {
+                "PORT": 5000,
+                "VOICE_RATE": 180,
+                "LISTEN_TIMEOUT": 5,
+                "PHRASE_TIME_LIMIT": 8,
+                "GEMINI_MAX_TOKENS": 512,
+            }
+            return defaults.get(info.field_name, 0)
 
     @property
     def IS_PRODUCTION(self) -> bool:
