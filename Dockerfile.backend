@@ -1,19 +1,15 @@
 # ─── NOVA Backend — Render.com Production Deployment ────────────────────────
-# Serves ONLY the FastAPI backend. Frontend is served separately on Vercel.
-# Uses production-optimized requirements (no audio/GUI system deps).
-
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Minimal system deps — build tools only. No audio/GUI libs (they don't work in
-# headless cloud anyway and the codebase has graceful import fallbacks).
+# Minimal system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PRODUCTION Python dependencies (root requirements.txt = no audio/GUI deps)
+# Install Python dependencies
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
@@ -21,24 +17,25 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy backend source code
 COPY backend/ ./backend/
 
-# Create writable data directories (Render's disk is ephemeral — use /tmp)
-RUN mkdir -p /tmp/nova_data/notes /tmp/nova_data/screenshots /tmp/nova_data/output /tmp/nova_data/workflows && \
+# Create writable data directories
+RUN mkdir -p /tmp/nova_data/notes /tmp/nova_data/screenshots /tmp/nova_data/output && \
     chmod -R 777 /tmp/nova_data
 
-# Environment
-ENV PYTHONPATH=/app
+# ── CRITICAL: PYTHONPATH must include backend/ so 'config', 'core', etc. resolve
+ENV PYTHONPATH=/app/backend
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=production
 ENV HOST=0.0.0.0
 
-# Render injects $PORT dynamically (defaults to 10000)
 EXPOSE 10000
 
-# 2 workers for Render starter plan (512MB RAM). Bind to $PORT for Render's proxy.
-CMD uvicorn backend.app:app \
+# Run from /app/backend so relative imports work correctly
+WORKDIR /app/backend
+
+CMD uvicorn app:app \
     --host 0.0.0.0 \
     --port ${PORT:-10000} \
-    --workers 2 \
+    --workers 1 \
     --loop uvloop \
     --http h11 \
     --proxy-headers \

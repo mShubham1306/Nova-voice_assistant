@@ -1,11 +1,9 @@
 # ─── NOVA Backend — Render.com Production Deployment ────────────────────────
-# Serves ONLY the FastAPI backend. Frontend is served separately on Vercel.
-
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Minimal system deps — build tools only
+# Minimal system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libc6-dev \
@@ -23,19 +21,21 @@ COPY backend/ ./backend/
 RUN mkdir -p /tmp/nova_data/notes /tmp/nova_data/screenshots /tmp/nova_data/output && \
     chmod -R 777 /tmp/nova_data
 
-# Environment
-ENV PYTHONPATH=/app
+# ── CRITICAL: PYTHONPATH must include backend/ so 'config', 'core', etc. resolve
+ENV PYTHONPATH=/app/backend
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=production
 ENV HOST=0.0.0.0
 
-# Render injects $PORT dynamically (defaults to 10000)
 EXPOSE 10000
 
-CMD uvicorn backend.app:app \
+# Run from /app/backend so relative imports work correctly
+WORKDIR /app/backend
+
+CMD uvicorn app:app \
     --host 0.0.0.0 \
     --port ${PORT:-10000} \
-    --workers 2 \
+    --workers 1 \
     --loop uvloop \
     --http h11 \
     --proxy-headers \
