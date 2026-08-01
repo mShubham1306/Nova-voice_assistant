@@ -1,0 +1,8 @@
+# Tell Vercel to ignore Python backend files so it only builds the Vite frontend
+requirements.txt
+requirements-ci.txt
+backend/
+api/
+Dockerfile*
+docker-compose*.yml
+render.yaml
