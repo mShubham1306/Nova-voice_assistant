@@ -3,7 +3,6 @@
   "private": true,
   "version": "2.0.0",
   "scripts": {
-    "build": "npm run build --prefix frontend",
-    "install-all": "npm install --prefix frontend"
+    "build": "npm --prefix frontend install && npm --prefix frontend run build"
   }
 }
