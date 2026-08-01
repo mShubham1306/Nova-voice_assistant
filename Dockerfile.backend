@@ -1,36 +1,45 @@
-# ─── NOVA Backend — Render.com Deployment ──────────────────────────────────
-# Serves ONLY the FastAPI backend (no frontend static files).
-# Frontend is served separately on Vercel.
+# ─── NOVA Backend — Render.com Production Deployment ────────────────────────
+# Serves ONLY the FastAPI backend. Frontend is served separately on Vercel.
+# Uses production-optimized requirements (no audio/GUI system deps).
 
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for audio (pyttsx3/espeak), PortAudio (sounddevice),
-# and build tools. On Render, audio won't actually play but imports won't crash.
-RUN apt-get update && apt-get install -y \
+# Minimal system deps — build tools only. No audio/GUI libs (they don't work in
+# headless cloud anyway and the codebase has graceful import fallbacks).
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    portaudio19-dev \
-    libespeak-ng1 \
-    espeak-ng \
-    libsndfile1 \
+    libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Install PRODUCTION Python dependencies (root requirements.txt = no audio/GUI deps)
+COPY requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy backend source code
 COPY backend/ ./backend/
 
-# Create writable data directories
-RUN mkdir -p /tmp/nova_data/notes /tmp/nova_data/screenshots /tmp/nova_data/workflows
+# Create writable data directories (Render's disk is ephemeral — use /tmp)
+RUN mkdir -p /tmp/nova_data/notes /tmp/nova_data/screenshots /tmp/nova_data/output /tmp/nova_data/workflows && \
+    chmod -R 777 /tmp/nova_data
 
 # Environment
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+ENV ENVIRONMENT=production
+ENV HOST=0.0.0.0
 
-# Render provides $PORT dynamically (default 10000)
+# Render injects $PORT dynamically (defaults to 10000)
 EXPOSE 10000
 
-CMD uvicorn backend.app:app --host 0.0.0.0 --port ${PORT:-10000}
+# 2 workers for Render starter plan (512MB RAM). Bind to $PORT for Render's proxy.
+CMD uvicorn backend.app:app \
+    --host 0.0.0.0 \
+    --port ${PORT:-10000} \
+    --workers 2 \
+    --loop uvloop \
+    --http h11 \
+    --proxy-headers \
+    --forwarded-allow-ips='*'

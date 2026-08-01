@@ -1,20 +1,75 @@
-__pycache__
+# ─── Docker / Render Backend Build Ignore ────────────────────────────────────
+# Dockerfile.backend copies ONLY: requirements.txt + backend/
+# Everything below prevents unnecessary Docker context upload.
+
+# Python bytecode & caches
+__pycache__/
 *.pyc
-.env
-.git
-.gitignore
-node_modules
-dist
-.vite
-.eslintcache
-npm-debug.log
-.DS_Store
-.idea
-.vscode
-*.log
-venv
-env
-.pytest_cache
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
 .coverage
-frontend/node_modules
-backend/__pycache__
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Env secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Frontend (served on Vercel — do NOT bake into backend image)
+frontend/
+src/
+public/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+dist/
+build/
+vite.config.js
+eslint.config.js
+index.html
+package.json
+package-lock.json
+*.local
+
+# Version control
+.git/
+.gitignore
+.github/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Docker / Vercel
+Dockerfile
+Dockerfile.*
+docker-compose*.yml
+vercel.json
+.vercelignore
+.vercel/
+render.yaml
+
+# Tests
+backend/tests/
+*.test.py
+*.spec.js
+

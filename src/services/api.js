@@ -1,8 +1,17 @@
 /**
- * NOVA API Service - Handles all backend communication
+ * NOVA API Service — Handles all backend communication.
+ *
+ * In development (Vite dev server):
+ *   VITE_API_URL is not set → API_BASE = '/api' → proxied to localhost:5000
+ *
+ * In production (Vercel frontend + Render backend):
+ *   VITE_API_URL = 'https://your-nova-backend.onrender.com'
+ *   API_BASE = 'https://your-nova-backend.onrender.com/api'
  */
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/api`
+  : '/api';
 
 async function fetchAPI(endpoint, options = {}) {
   try {
