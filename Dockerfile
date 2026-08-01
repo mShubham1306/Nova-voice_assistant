@@ -1,49 +1,42 @@
-# ─── Stage 1: Build Frontend ──────────────────────────────────────────────────
-FROM node:20-alpine AS frontend-build
+# ─── NOVA Backend — Render.com Production Deployment ────────────────────────
+# Serves ONLY the FastAPI backend. Frontend is served separately on Vercel.
 
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend/ ./
-RUN npm run build
-
-# ─── Stage 2: Python Backend Runtime ─────────────────────────────────────────
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for audio (portaudio), GUI (xvfb, scrot),
-# and build tools (gcc). These are needed by pyttsx3, sounddevice, pyautogui.
-RUN apt-get update && apt-get install -y \
+# Minimal system deps — build tools only
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    portaudio19-dev \
-    libespeak-ng1 \
-    espeak-ng \
-    libxcb-xinerama0 \
-    scrot \
-    python3-xlib \
-    xvfb \
+    libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy and install Python dependencies
-COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies
+COPY requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Copy backend source
+# Copy backend source code
 COPY backend/ ./backend/
 
-# Copy pre-built frontend
-COPY --from=frontend-build /app/frontend/dist ./backend/static
-
 # Create writable data directories
-RUN mkdir -p ./backend/data/notes ./backend/data/screenshots ./backend/data/workflows
+RUN mkdir -p /tmp/nova_data/notes /tmp/nova_data/screenshots /tmp/nova_data/output && \
+    chmod -R 777 /tmp/nova_data
 
 # Environment
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+ENV ENVIRONMENT=production
 ENV HOST=0.0.0.0
-ENV PORT=5000
 
-EXPOSE 5000
+# Render injects $PORT dynamically (defaults to 10000)
+EXPOSE 10000
 
-CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "5000"]
+CMD uvicorn backend.app:app \
+    --host 0.0.0.0 \
+    --port ${PORT:-10000} \
+    --workers 2 \
+    --loop uvloop \
+    --http h11 \
+    --proxy-headers \
+    --forwarded-allow-ips='*'
