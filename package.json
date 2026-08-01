@@ -1,0 +1,9 @@
+{
+  "name": "nova-root",
+  "private": true,
+  "version": "2.0.0",
+  "scripts": {
+    "build": "npm run build --prefix frontend",
+    "install-all": "npm install --prefix frontend"
+  }
+}
